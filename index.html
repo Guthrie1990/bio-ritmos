@@ -247,6 +247,15 @@
         const root = document.getElementById("root");
         ReactDOM.render(React.createElement(App), root);
     </script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js');
+        });
+      }
+    </script>
+</body>
+</html>
 </body>
 </html>
 
