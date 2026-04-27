@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Biorritmos Familiar</title>
+    <style>
+        body { margin: 0; padding: 0; background-color: #000; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="module">
+        import React, { useState, useEffect } from "https://cdn.skypack.dev/react";
+        import ReactDOM from "https://cdn.skypack.dev/react-dom";
+
+        // Aquí está el código que me pasaste
+        function App() {
+            const [usuarios, setUsuarios] = useState(() => {
+                const guardados = localStorage.getItem('bioritmos_familia');
+                return guardados ? JSON.parse(guardados) : [{ nombre: "Ejemplo", fecha: "1995-05-15", hora: "12:00" }];
+            });
+
+            useEffect(() => {
+                localStorage.setItem('bioritmos_familia', JSON.stringify(usuarios));
+            }, [usuarios]);
+
+            const [nuevoNombre, setNuevoNombre] = useState('');
+            const [nuevaFecha, setNuevaFecha] = useState('');
+            const [nuevaHora, setNuevaHora] = useState('12:00');
+            const [vista, setVista] = useState('dashboard');
+            const [usuarioDetalle, setUsuarioDetalle] = useState(null);
+            const [fechaSeleccionada, setFechaSeleccionada] = useState(new Date());
+            const [mesOffset, setMesOffset] = useState(0);
+            const [graficoOffsetMes, setGraficoOffsetMes] = useState(0);
+
+            useEffect(() => {
+                document.body.style.overflow = usuarioDetalle ? 'hidden' : 'unset';
+            }, [usuarioDetalle]);
+
+            const CICLOS = { fisico: 23, emocional: 28, intelectual: 33 };
+            const COLORES_LINEA = { fisico: '#00FFFF', emocional: '#FF00FF', intelectual: '#FFFF00' };
+
+            const CONSEJOS = {
+                fisico_alto: ["Ideal para mudanzas, deporte o tareas pesadas.", "Cuerpo de acero: ¡aprovecha esta energía!"],
+                fisico_bajo: ["Evita esfuerzos pesados. Tu cuerpo pide descanso.", "Batería baja: no fuerces la máquina hoy."],
+                emocional_alto: ["Brillo social: buen día para reuniones o llamadas.", "Carisma al 100%. Momento de conectar."],
+                emocional_bajo: ["Paciencia extra hoy: podrías estar sensible.", "Día de introspección: el autocuidado es vital."],
+                intelectual_alto: ["Firma contratos, resuelve puzzles o estudia.", "Lucidez extrema: planificación estratégica activa."],
+                intelectual_bajo: ["No es el mejor día para decisiones financieras.", "Mente nublada: revisa todo dos veces."],
+                cruce: ["Día de reajuste. Máxima precaución en palabras.", "Transición inestable. Respira antes de actuar."]
+            };
+
+            const calcularBiorritmoPreciso = (fechaNac, horaNac, fechaRef, offsetHoras = 0) => {
+                const nacimiento = new Date(`${fechaNac}T${horaNac}:00`);
+                const ref = new Date(fechaRef);
+                ref.setHours(ref.getHours() + offsetHoras);
+                const diasVividos = (ref - nacimiento) / (1000 * 60 * 60 * 24);
+                return {
+                    fisico: Math.sin((2 * Math.PI * diasVividos) / CICLOS.fisico),
+                    emocional: Math.sin((2 * Math.PI * diasVividos) / CICLOS.emocional),
+                    intelectual: Math.sin((2 * Math.PI * diasVividos) / CICLOS.intelectual)
+                };
+            };
+
+            const buscarHoraCruce = (u, fecha, tipo) => {
+                for (let h = 0; h < 24; h++) {
+                    const v1 = calcularBiorritmoPreciso(u.fecha, u.hora, fecha, h)[tipo];
+                    const v2 = calcularBiorritmoPreciso(u.fecha, u.hora, fecha, h + 1)[tipo];
+                    if (v1 * v2 <= 0) return `${h.toString().padStart(2, '0')}:00`; 
+                }
+                return null;
+            };
+
+            const getEstiloColor = (v) => {
+                if (v >= 0.50) return { bg: '#16a34a' }; 
+                if (v > 0) return { bg: '#1d4ed8' };    
+                if (v > -0.50) return { bg: '#b45309' }; 
+                return { bg: '#dc2626' };                
+            };
+
+            const renderBannerReporte = () => {
+                if (usuarios.length === 0) return "🛰️ Configura los miembros en la sección (+).";
+                let reportes = [];
+                usuarios.forEach(u => {
+                    const v = calcularBiorritmoPreciso(u.fecha, u.hora, fechaSeleccionada);
+                    const cF = buscarHoraCruce(u, fechaSeleccionada, 'fisico');
+                    const cE = buscarHoraCruce(u, fechaSeleccionada, 'emocional');
+                    if (cF || cE) reportes.push(`⚠️ **${u.nombre}**: ${CONSEJOS.cruce[0]} (${cF || cE})`);
+                    else if (v.fisico < -0.8) reportes.push(`🔋 **${u.nombre}**: ${CONSEJOS.fisico_bajo[0]}`);
+                    else if (v.emocional < -0.8) reportes.push(`🕯️ **${u.nombre}**: ${CONSEJOS.emocional_bajo[0]}`);
+                });
+                return reportes.length === 0 ? "☀️ Armonía total: Un día estable para todo el equipo." : reportes.map((m, idx) => React.createElement('div', {key: idx, style: {marginBottom:'4px'}}, m));
+            };
+
+            const getSintoniaMensual = () => {
+                const eventos = [];
+                const targetMes = new Date(fechaSeleccionada.getFullYear(), fechaSeleccionada.getMonth() + mesOffset, 1);
+                const diasEnMes = new Date(targetMes.getFullYear(), targetMes.getMonth() + 1, 0).getDate();
+                usuarios.forEach(u => {
+                    for (let d = 1; d <= diasEnMes; d++) {
+                        const f = new Date(targetMes.getFullYear(), targetMes.getMonth(), d, 12, 0);
+                        const v = calcularBiorritmoPreciso(u.fecha, u.hora, f);
+                        let cF = buscarHoraCruce(u, f, 'fisico');
+                        let cE = buscarHoraCruce(u, f, 'emocional');
+                        if (cF || cE) eventos.push({ dia: d, msg: `⚠️ ${u.nombre}: Reajuste crítico. ${CONSEJOS.cruce[1]}`, color: '#facc15' });
+                        if (v.fisico > 0.85) eventos.push({ dia: d, msg: `💪 ${u.nombre}: ${CONSEJOS.fisico_alto[1]}`, color: '#4ade80' });
+                        if (v.intelectual > 0.85) eventos.push({ dia: d, msg: `🧠 ${u.nombre}: ${CONSEJOS.intelectual_alto[1]}`, color: '#00FFFF' });
+                        if (v.emocional > 0.85) eventos.push({ dia: d, msg: `❤️ ${u.nombre}: ${CONSEJOS.emocional_alto[1]}`, color: '#FF00FF' });
+                        if (v.fisico < -0.85) eventos.push({ dia: d, msg: `🛌 ${u.nombre}: ${CONSEJOS.fisico_bajo[1]}`, color: '#ef4444' });
+                        if (v.emocional < -0.85) eventos.push({ dia: d, msg: `🛡️ ${u.nombre}: ${CONSEJOS.emocional_bajo[1]}`, color: '#ef4444' });
+                    }
+                });
+                return eventos.sort((a,b)=>a.dia-b.dia).map((ev, i) => (
+                    React.createElement('div', { key: i, style: { fontSize: '11px', borderBottom: '1px solid #222', padding: '12px 0' } },
+                        React.createElement('span', { style: {color:'#555', fontSize:'9px', fontWeight:'bold'} }, `DÍA ${ev.dia}`),
+                        React.createElement('br'),
+                        React.createElement('span', { style: { color: ev.color, fontSize:'12px', lineHeight:'1.4' } }, ev.msg)
+                    )
+                ));
+            };
+
+            const generarRutaMes = (tipo, u, mesRef, yearRef) => {
+                const primerDiaMes = new Date(yearRef, mesRef, 1);
+                const diasEnMes = new Date(yearRef, mesRef + 1, 0).getDate();
+                let puntos = "";
+                for (let i = 0; i < diasEnMes; i++) {
+                    const f = new Date(primerDiaMes);
+                    f.setDate(f.getDate() + i); f.setHours(12, 0, 0); 
+                    const v = calcularBiorritmoPreciso(u.fecha, u.hora, f);
+                    const x = (i * (300 / (diasEnMes - 1)));
+                    const y = 50 - (v[tipo] * 45);
+                    puntos += `${i === 0 ? 'M' : 'L'} ${x} ${y} `;
+                }
+                return puntos;
+            };
+
+            return (
+                React.createElement('div', { style: { background: '#000', minHeight: '100vh', color: '#fff', padding: '15px', fontFamily: 'sans-serif' } },
+                    React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', marginBottom: '25px', alignItems: 'center' } },
+                        React.createElement('h2', { style: { color: '#4ade80', margin: 0, fontSize: '20px', letterSpacing:'1px', fontWeight:'900' } }, "BIO-RITMOS"),
+                        React.createElement('div', { style: { display: 'flex', gap: '6px' } },
+                            ['dashboard', 'sintonía', 'config'].map(v => (
+                                React.createElement('button', {
+                                    key: v,
+                                    onClick: () => setVista(v === 'sintonía' ? 'mensual' : v),
+                                    style: { padding: '10px 12px', background: (vista === v || (vista === 'mensual' && v === 'sintonía')) ? '#16a34a' : '#111', color: '#fff', border:'1px solid #222', borderRadius:'10px', fontSize:'9px', fontWeight:'bold' }
+                                }, v.toUpperCase())
+                            ))
+                        )
+                    ),
+                    vista === 'dashboard' && React.createElement('div', null,
+                        React.createElement('div', { style: { display: 'flex', justifyContent: 'center', gap: '15px', marginBottom:'25px' } },
+                            React.createElement('button', { onClick: () => setFechaSeleccionada(new Date(fechaSeleccionada.setDate(fechaSeleccionada.getDate()-1))), style: { background: '#111', border: '1px solid #222', color: '#fff', borderRadius: '50%', width: '42px', height: '42px' } }, "←"),
+                            React.createElement('input', { type: "date", value: fechaSeleccionada.toISOString().split('T')[0], onChange: (e) => setFechaSeleccionada(new Date(e.target.value + 'T00:00:00')), style: { background: '#000', color: '#4ade80', border: '1px solid #16a34a', padding: '8px 12px', borderRadius: '12px', fontWeight:'bold', textAlign:'center' } }),
+                            React.createElement('button', { onClick: () => setFechaSeleccionada(new Date(fechaSeleccionada.setDate(fechaSeleccionada.getDate()+1))), style: { background: '#111', border: '1px solid #222', color: '#fff', borderRadius: '50%', width: '42px', height: '42px' } }, "→")
+                        ),
+                        React.createElement('div', { style: { background: 'linear-gradient(135deg, #052e16 0%, #000 100%)', padding: '20px', borderRadius: '20px', marginBottom: '25px', borderLeft: '5px solid #16a34a', fontSize: '13px', lineHeight:'1.5' } }, renderBannerReporte()),
+                        usuarios.map((u, i) => {
+                            const v = calcularBiorritmoPreciso(u.fecha, u.hora, fechaSeleccionada);
+                            return React.createElement('div', { key: i, style: { background: '#0a0a0a', padding: '22px', borderRadius: '25px', marginBottom: '15px', border: '1px solid #1a1a1a' } },
+                                React.createElement('div', { onClick: () => { setUsuarioDetalle(u); setGraficoOffsetMes(0); }, style: { fontWeight: 'bold', color: '#4ade80', cursor: 'pointer', marginBottom:'20px', display:'flex', justifyContent:'space-between', alignItems:'center' } },
+                                    React.createElement('span', {style:{fontSize:'16px'}}, u.nombre),
+                                    React.createElement('span', {style:{fontSize:'8px', color:'#555', border:'1px solid #222', padding:'4px 10px', borderRadius:'10px'}}, "GRÁFICO MENSUAL ›")
+                                ),
+                                React.createElement('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' } },
+                                    ['fisico', 'emocional', 'intelectual'].map(tipo => {
+                                        const cruce = buscarHoraCruce(u, fechaSeleccionada, tipo);
+                                        return React.createElement('div', { key: tipo, style: { textAlign: 'center' } },
+                                            React.createElement('div', { style: { fontSize: '7px', color: '#444', marginBottom: '6px', fontWeight:'800' } }, tipo.toUpperCase()),
+                                            React.createElement('div', { style: { background: cruce ? '#fff' : getEstiloColor(v[tipo]).bg, color: cruce ? '#000' : '#fff', height: '45px', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '900' } }, cruce || `${(v[tipo] * 100).toFixed(0)}%`)
+                                        );
+                                    })
+                                )
+                            );
+                        })
+                    ),
+                    vista === 'mensual' && React.createElement('div', { style: { background: '#0a0a0a', padding: '25px', borderRadius: '30px', border:'1px solid #1a1a1a' } },
+                        React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' } },
+                            React.createElement('button', { onClick: () => setMesOffset(mesOffset - 1), style: { background: '#111', border:'1px solid #222', color:'#fff', width:'38px', height:'38px', borderRadius:'50%' } }, "←"),
+                            React.createElement('span', { style: {textTransform:'capitalize', fontWeight:'900', color:'#4ade80'} }, new Date(fechaSeleccionada.getFullYear(), fechaSeleccionada.getMonth() + mesOffset).toLocaleString('es-ES', {month:'long', year:'numeric'})),
+                            React.createElement('button', { onClick: () => setMesOffset(mesOffset + 1), style: { background: '#111', border:'1px solid #222', color:'#fff', width:'38px', height:'38px', borderRadius:'50%' } }, "→")
+                        ),
+                        React.createElement('div', {style:{maxHeight:'62vh', overflowY:'auto'}}, getSintoniaMensual())
+                    ),
+                    vista === 'config' && React.createElement('div', null,
+                        React.createElement('div', { style: { background: '#0a0a0a', padding: '25px', borderRadius: '30px', marginBottom:'25px', border:'1px solid #1a1a1a' } },
+                            React.createElement('h3', {style:{color:'#4ade80', marginTop:0, fontSize:'14px', letterSpacing:'1px', marginBottom:'20px'}}, "NUEVO REGISTRO"),
+                            React.createElement('input', { type: "text", placeholder: "Nombre", value: nuevoNombre, onChange: e => setNuevoNombre(e.target.value), style: { width: '100%', padding: '15px', marginBottom: '12px', background: '#111', color: '#fff', border: '1px solid #222', borderRadius: '15px', boxSizing:'border-box' } }),
+                            React.createElement('div', { style: { display: 'flex', gap: '10px', marginBottom: '20px' } },
+                                React.createElement('input', { type: "date", value: nuevaFecha, onChange: e => setNuevaFecha(e.target.value), style: { flex: 2, padding: '15px', background: '#111', color: '#fff', border: '1px solid #222', borderRadius: '15px' } }),
+                                React.createElement('input', { type: "time", value: nuevaHora, onChange: e => setNuevaHora(e.target.value), style: { flex: 1, padding: '15px', background: '#111', color: '#fff', border: '1px solid #222', borderRadius: '15px' } })
+                            ),
+                            React.createElement('button', { onClick: () => { if(nuevoNombre && nuevaFecha) { setUsuarios([...usuarios, {nombre: nuevoNombre, fecha: nuevaFecha, hora: nuevaHora}]); setNuevoNombre(''); setVista('dashboard'); } }, style: { width: '100%', padding: '18px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: '15px', fontWeight: 'bold' } }, "GUARDAR PERFIL")
+                        ),
+                        React.createElement('div', { style: { background: '#0a0a0a', padding: '15px', borderRadius: '30px', border:'1px solid #1a1a1a' } },
+                            usuarios.map((u, i) => (
+                                React.createElement('div', { key: i, style: { display: 'flex', justifyContent: 'space-between', alignItems:'center', padding: '18px 10px', borderBottom: i === usuarios.length -1 ? 'none' : '1px solid #1a1a1a' } },
+                                    React.createElement('div', null, React.createElement('div', {style:{fontWeight:'bold', color:'#fff'}}, u.nombre), React.createElement('div', {style:{fontSize:'10px', color:'#444'}}, `${u.fecha} • ${u.hora}hs`)),
+                                    React.createElement('button', { onClick: () => setUsuarios(usuarios.filter((_,idx)=>idx!==i)), style: {color:'#dc2626', background:'none', border:'none', fontSize:'10px', fontWeight:'bold'} }, "ELIMINAR")
+                                )
+                            ))
+                        )
+                    ),
+                    usuarioDetalle && React.createElement('div', {
+                        onClick: () => setUsuarioDetalle(null),
+                        style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.98)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '15px', zIndex: 2000, overflowY: 'auto' }
+                    },
+                        React.createElement('div', {
+                            onClick: (e) => e.stopPropagation(),
+                            style: { background: '#0a0a0a', width: '100%', maxWidth: '500px', borderRadius: '35px', padding: '30px', border: '1px solid #1a1a1a', margin: 'auto' }
+                        },
+                            React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', marginBottom: '30px' } },
+                                React.createElement('h3', { style: { margin: 0, color: '#4ade80', fontSize:'18px', fontWeight:'900' } }, usuarioDetalle.nombre),
+                                React.createElement('button', { onClick: () => setUsuarioDetalle(null), style: { background: '#1a1a1a', border: 'none', color: '#fff', borderRadius: '50%', width: '35px', height: '35px' } }, "✕")
+                            ),
+                            React.createElement('div', { style: { textAlign: 'center', marginBottom: '30px' } },
+                                React.createElement('button', { onClick: () => setGraficoOffsetMes(prev => prev - 1), style: { background: 'none', border: 'none', color: '#fff', fontSize: '22px' } }, "←"),
+                                React.createElement('span', { style: { margin: '0 25px', textTransform: 'capitalize', fontWeight: '900', fontSize:'14px' } }, new Date(fechaSeleccionada.getFullYear(), fechaSeleccionada.getMonth() + graficoOffsetMes).toLocaleString('es-ES', { month: 'long', year: 'numeric' })),
+                                React.createElement('button', { onClick: () => setGraficoOffsetMes(prev => prev + 1), style: { background: 'none', border: 'none', color: '#fff', fontSize: '22px' } }, "→")
+                            ),
+                            React.createElement('div', { style: { height: '180px', position: 'relative', marginLeft: '30px', marginBottom: '50px' } },
+                                React.createElement('div', { style: { position: 'absolute', left: '-30px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', fontSize: '8px', color: '#333' } },
+                                    React.createElement('span', null, "100"), React.createElement('span', null, "50"), React.createElement('span', null, "0"), React.createElement('span', null, "-50"), React.createElement('span', null, "-100")
+                                ),
+                                React.createElement('svg', { viewBox: "0 0 300 100", preserveAspectRatio: "none", style: { width: '100%', height: '100%', overflow: 'visible' } },
+                                    React.createElement('line', { x1: "0", y1: "50", x2: "300", y2: "50", stroke: "#1a1a1a", strokeWidth: "1.5" }),
+                                    ['fisico', 'emocional', 'intelectual'].map(tipo => (
+                                        React.createElement('path', { key: tipo, d: generarRutaMes(tipo, usuarioDetalle, fechaSeleccionada.getMonth() + graficoOffsetMes, fechaSeleccionada.getFullYear()), fill: "none", stroke: COLORES_LINEA[tipo], strokeWidth: "2.5", strokeLinecap: "round" })
+                                    ))
+                                )
+                            ),
+                            React.createElement('div', { style: { display: 'flex', justifyContent: 'center', gap: '18px', fontSize: '9px', marginBottom:'30px' } },
+                                React.createElement('div', { style: { display:'flex', alignItems:'center', gap:'6px' } }, React.createElement('div', {style:{width:'10px', height:'2px', background:COLORES_LINEA.fisico}}), " FÍSICO"),
+                                React.createElement('div', { style: { display:'flex', alignItems:'center', gap:'6px' } }, React.createElement('div', {style:{width:'10px', height:'2px', background:COLORES_LINEA.emocional}}), " EMOCIONAL"),
+                                React.createElement('div', { style: { display:'flex', alignItems:'center', gap:'6px' } }, React.createElement('div', {style:{width:'10px', height:'2px', background:COLORES_LINEA.intelectual}}), " INTELECTUAL")
+                            ),
+                            React.createElement('button', { onClick: () => setUsuarioDetalle(null), style: { width: '100%', padding: '18px', background: '#16a34a', border: 'none', borderRadius: '18px', color: '#fff', fontWeight: '900' } }, "CERRAR GRÁFICO")
+                        )
+                    )
+                )
+            );
+        }
+
+        const root = document.getElementById("root");
+        ReactDOM.render(React.createElement(App), root);
+    </script>
+</body>
+</html>
